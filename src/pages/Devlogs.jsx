@@ -13,6 +13,8 @@ const Devlogs = () => {
   // Fetch devlogs
   useEffect(() => {
     const devlogsRef = ref(db, "devnote/devlogs");
+    const usersRef = ref(db, "devnote/users");
+
     onValue(devlogsRef, (snapshot) => {
       const data = snapshot.val();
       const formattedDevlogs = [];
@@ -29,15 +31,21 @@ const Devlogs = () => {
       }
       setDevlogs(formattedDevlogs);
     });
-  }, [db]);
 
-  // Toggle devlog status (publish/unpublish)
-  const handleToggleStatus = (userId, devlogId, isPublished) => {
-    const devlogRef = ref(db, `devnote/devlogs/${userId}/${devlogId}`);
-    update(devlogRef, { isPublished: !isPublished }).catch((error) =>
-      console.error("Error toggling devlog status:", error)
-    );
-  };
+    // Fetch suspended users
+    onValue(usersRef, (snapshot) => {
+      const data = snapshot.val();
+      const suspended = {};
+      if (data) {
+        Object.keys(data).forEach((userId) => {
+          if (data[userId].isSuspended) {
+            suspended[userId] = true;
+          }
+        });
+      }
+      setSuspendedUsers(suspended);
+    });
+  }, [db]);
 
   // Suspend a commenter
   const handleSuspendCommenter = (userId) => {
@@ -45,13 +53,21 @@ const Devlogs = () => {
     const userRef = ref(db, `devnote/users/${userId}`);
     update(userRef, { isSuspended: true })
       .then(() => {
-        setSuspendedUsers((prev) => ({ ...prev, [userId]: true })); // Update UI immediately
+        setSuspendedUsers((prev) => ({ ...prev, [userId]: true }));
         alert("User has been suspended successfully.");
       })
       .catch((error) => {
         console.error("Error suspending commenter:", error);
         alert("Failed to suspend the user. Please try again.");
       });
+  };
+
+  // Toggle devlog status (publish/unpublish)
+  const handleToggleStatus = (userId, devlogId, isPublished) => {
+    const devlogRef = ref(db, `devnote/devlogs/${userId}/${devlogId}`);
+    update(devlogRef, { isPublished: !isPublished }).catch((error) =>
+      console.error("Error toggling devlog status:", error)
+    );
   };
 
   // Handle likes/dislikes
@@ -85,13 +101,6 @@ const Devlogs = () => {
     );
   };
 
-  // Render likes or dislikes list
-  const renderUserList = (users) => {
-    return Object.keys(users || {}).map((userId) => (
-      <p key={userId} className="text-sm text-gray-600">{`User: ${userId}`}</p>
-    ));
-  };
-
   // Render comments and replies
   const renderComments = (comments, parentPath = "") => {
     return Object.keys(comments || {}).map((commentId) => {
@@ -118,7 +127,7 @@ const Devlogs = () => {
               />
             </div>
           )}
-          <div className="flex items-center space-x-2 mt-2">
+          <div className="flex flex-col md:flex-row items-start md:items-center space-y-2 md:space-y-0 md:space-x-2 mt-2">
             <button
               className={`text-sm ${
                 isSuspended ? "text-gray-400 cursor-not-allowed" : "text-red-500"
@@ -161,106 +170,117 @@ const Devlogs = () => {
     <div className="p-4">
       <h1 className="text-2xl font-bold mb-4">Devlogs Management</h1>
 
-      <table className="table-auto w-full bg-white shadow-md rounded mb-6">
-        <thead>
-          <tr className="bg-gray-100">
-            <th className="px-4 py-2">Image</th>
-            <th className="px-4 py-2">Title</th>
-            <th className="px-4 py-2">Author</th>
-            <th className="px-4 py-2">Status</th>
-            <th className="px-4 py-2">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {devlogs.map((devlog) => (
-            <React.Fragment key={`${devlog.userId}-${devlog.devlogId}`}>
-              <tr className="text-center border-t">
-                <td className="px-4 py-2">
-                  <img
-                    src={devlog.image || "https://via.placeholder.com/150"}
-                    alt={devlog.title}
-                    className="w-16 h-16 object-cover rounded-md"
-                  />
-                </td>
-                <td className="px-4 py-2">{devlog.title}</td>
-                <td className="px-4 py-2">{devlog.author || "Unknown"}</td>
-                <td className="px-4 py-2">{devlog.isPublished ? "Published" : "Unpublished"}</td>
-                <td className="px-4 py-2 space-x-2">
-                  <button
-                    className="bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600"
-                    onClick={() =>
-                      handleToggleStatus(devlog.userId, devlog.devlogId, devlog.isPublished)
-                    }
-                  >
-                    {devlog.isPublished ? "Unpublish" : "Publish"}
-                  </button>
-                  <button
-                    className="bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600"
-                    onClick={() =>
-                      setExpandedDevlogId(
-                        expandedDevlogId === devlog.devlogId ? null : devlog.devlogId
-                      )
-                    }
-                  >
-                    {expandedDevlogId === devlog.devlogId ? "Hide Details" : "View Details"}
-                  </button>
-                </td>
-              </tr>
-
-              {expandedDevlogId === devlog.devlogId && (
-                <tr>
-                  <td colSpan="5" className="p-4 bg-gray-50">
-                    <div className="flex space-x-4">
-                      <img
-                        src={devlog.image || "https://via.placeholder.com/150"}
-                        alt="Devlog"
-                        className="w-32 h-32 object-cover rounded-md"
-                      />
-                      <div>
-                        <h3 className="text-lg font-semibold">{devlog.description}</h3>
-                        <div className="flex mt-4">
-                          <button
-                            className="flex items-center text-green-500 mr-4"
-                            onClick={() =>
-                              handleLikeDislike(
-                                `devnote/devlogs/${devlog.userId}/${devlog.devlogId}`,
-                                "likes",
-                                devlog.userId
-                              )
-                            }
-                          >
-                            <AiOutlineLike />
-                            <span className="ml-1">{Object.keys(devlog.likes || {}).length}</span>
-                          </button>
-                          <button
-                            className="flex items-center text-red-500"
-                            onClick={() =>
-                              handleLikeDislike(
-                                `devnote/devlogs/${devlog.userId}/${devlog.devlogId}`,
-                                "dislikes",
-                                devlog.userId
-                              )
-                            }
-                          >
-                            <AiOutlineDislike />
-                            <span className="ml-1">{Object.keys(devlog.dislikes || {}).length}</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                    <h3 className="text-lg font-semibold mt-4">Comments:</h3>
-                    {devlog.comments ? (
-                      <div>{renderComments(devlog.comments)}</div>
-                    ) : (
-                      <p>No Comments</p>
+      <div className="overflow-x-auto">
+        <table className="table-auto w-full bg-white shadow-md rounded mb-6">
+          <thead>
+            <tr className="bg-gray-100">
+              <th className="px-4 py-2">Image</th>
+              <th className="px-4 py-2">Title</th>
+              <th className="px-4 py-2">Author</th>
+              <th className="px-4 py-2">Status</th>
+              <th className="px-4 py-2">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {devlogs.map((devlog) => (
+              <React.Fragment key={`${devlog.userId}-${devlog.devlogId}`}>
+                <tr className="text-center border-t">
+                  <td className="px-4 py-2">
+                    <img
+                      src={devlog.image || "https://via.placeholder.com/150"}
+                      alt={devlog.title}
+                      className="w-16 h-16 object-cover rounded-md"
+                    />
+                  </td>
+                  <td className="px-4 py-2">{devlog.title}</td>
+                  <td className="px-4 py-2">
+                    {devlog.author || "Unknown"}{" "}
+                    {suspendedUsers[devlog.userId] && (
+                      <span className="text-red-500">(Suspended)</span>
                     )}
                   </td>
+                  <td className="px-4 py-2">{devlog.isPublished ? "Published" : "Unpublished"}</td>
+                  <td className="px-4 py-2 space-y-2 md:space-y-0 md:space-x-2 flex flex-col md:flex-row justify-center">
+                    <button
+                      className="bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600"
+                      onClick={() =>
+                        handleToggleStatus(devlog.userId, devlog.devlogId, devlog.isPublished)
+                      }
+                    >
+                      {devlog.isPublished ? "Unpublish" : "Publish"}
+                    </button>
+                    <button
+                      className="bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600"
+                      onClick={() =>
+                        setExpandedDevlogId(
+                          expandedDevlogId === devlog.devlogId ? null : devlog.devlogId
+                        )
+                      }
+                    >
+                      {expandedDevlogId === devlog.devlogId ? "Hide Details" : "View Details"}
+                    </button>
+                  </td>
                 </tr>
-              )}
-            </React.Fragment>
-          ))}
-        </tbody>
-      </table>
+
+                {expandedDevlogId === devlog.devlogId && (
+                  <tr>
+                    <td colSpan="5" className="p-4 bg-gray-50">
+                      <div className="flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-4">
+                        <img
+                          src={devlog.image || "https://via.placeholder.com/150"}
+                          alt="Devlog"
+                          className="w-32 h-32 object-cover rounded-md mx-auto md:mx-0"
+                        />
+                        <div>
+                          <h3 className="text-lg font-semibold">{devlog.description}</h3>
+                          <div className="flex flex-col md:flex-row mt-4 space-y-2 md:space-y-0 md:space-x-4">
+                            <button
+                              className="flex items-center text-green-500"
+                              onClick={() =>
+                                handleLikeDislike(
+                                  `devnote/devlogs/${devlog.userId}/${devlog.devlogId}`,
+                                  "likes",
+                                  devlog.userId
+                                )
+                              }
+                            >
+                              <AiOutlineLike />
+                              <span className="ml-1">
+                                {Object.keys(devlog.likes || {}).length}
+                              </span>
+                            </button>
+                            <button
+                              className="flex items-center text-red-500"
+                              onClick={() =>
+                                handleLikeDislike(
+                                  `devnote/devlogs/${devlog.userId}/${devlog.devlogId}`,
+                                  "dislikes",
+                                  devlog.userId
+                                )
+                              }
+                            >
+                              <AiOutlineDislike />
+                              <span className="ml-1">
+                                {Object.keys(devlog.dislikes || {}).length}
+                              </span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      <h3 className="text-lg font-semibold mt-4">Comments:</h3>
+                      {devlog.comments ? (
+                        <div>{renderComments(devlog.comments)}</div>
+                      ) : (
+                        <p>No Comments</p>
+                      )}
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };
