@@ -6,6 +6,7 @@ const Devlogs = () => {
   const [devlogs, setDevlogs] = useState([]);
   const [expandedDevlogId, setExpandedDevlogId] = useState(null);
   const [expandedComments, setExpandedComments] = useState({});
+  const [suspendedUsers, setSuspendedUsers] = useState({}); // Track suspended users
 
   const db = getDatabase();
 
@@ -38,12 +39,13 @@ const Devlogs = () => {
     );
   };
 
-  // Suspend a user by updating isSuspended to true
+  // Suspend a commenter
   const handleSuspendCommenter = (userId) => {
     if (!userId) return;
     const userRef = ref(db, `devnote/users/${userId}`);
     update(userRef, { isSuspended: true })
       .then(() => {
+        setSuspendedUsers((prev) => ({ ...prev, [userId]: true })); // Update UI immediately
         alert("User has been suspended successfully.");
       })
       .catch((error) => {
@@ -52,18 +54,58 @@ const Devlogs = () => {
       });
   };
 
+  // Handle likes/dislikes
+  const handleLikeDislike = (path, type, userId) => {
+    const actionRef = ref(db, `${path}/${type}/${userId}`);
+    const oppositeType = type === "likes" ? "dislikes" : "likes";
+    const oppositeActionRef = ref(db, `${path}/${oppositeType}/${userId}`);
+
+    onValue(
+      actionRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          remove(actionRef).catch((error) => console.error("Error removing like/dislike:", error));
+        } else {
+          update(actionRef, {
+            userId,
+            timestamp: new Date().toISOString(),
+          }).catch((error) => console.error("Error adding like/dislike:", error));
+
+          // Remove opposite action
+          onValue(
+            oppositeActionRef,
+            (oppositeSnap) => {
+              if (oppositeSnap.exists()) remove(oppositeActionRef);
+            },
+            { onlyOnce: true }
+          );
+        }
+      },
+      { onlyOnce: true }
+    );
+  };
+
+  // Render likes or dislikes list
+  const renderUserList = (users) => {
+    return Object.keys(users || {}).map((userId) => (
+      <p key={userId} className="text-sm text-gray-600">{`User: ${userId}`}</p>
+    ));
+  };
+
   // Render comments and replies
   const renderComments = (comments, parentPath = "") => {
     return Object.keys(comments || {}).map((commentId) => {
       const comment = comments[commentId];
       const commentPath = `${parentPath ? `${parentPath}/` : ""}comments/${commentId}`;
       const isExpanded = expandedComments[commentId];
+      const isSuspended =
+        suspendedUsers[comment.user?.id] || comment.user?.isSuspended;
 
       return (
         <div key={commentId} className="ml-4 border-l pl-4 mt-4">
           <p className="font-semibold">
             {comment.user?.name || "Anonymous"}{" "}
-            {comment.user?.isSuspended && <span className="text-red-500">(Suspended)</span>}:
+            {isSuspended && <span className="text-red-500">(Suspended)</span>}:
           </p>
           <p>{comment.text}</p>
           {comment.fileURL && (
@@ -78,10 +120,27 @@ const Devlogs = () => {
           )}
           <div className="flex items-center space-x-2 mt-2">
             <button
-              className="text-red-500 text-sm"
+              className={`text-sm ${
+                isSuspended ? "text-gray-400 cursor-not-allowed" : "text-red-500"
+              }`}
+              disabled={isSuspended}
               onClick={() => handleSuspendCommenter(comment.user?.id)}
             >
-              Suspend User
+              {isSuspended ? "User Suspended" : "Suspend User"}
+            </button>
+            <button
+              className="flex items-center text-green-500"
+              onClick={() => handleLikeDislike(commentPath, "likes", comment.user?.id)}
+            >
+              {comment.likes?.[comment.user?.id] ? <AiFillLike /> : <AiOutlineLike />}
+              <span className="ml-1">{Object.keys(comment.likes || {}).length}</span>
+            </button>
+            <button
+              className="flex items-center text-red-500"
+              onClick={() => handleLikeDislike(commentPath, "dislikes", comment.user?.id)}
+            >
+              {comment.dislikes?.[comment.user?.id] ? <AiFillDislike /> : <AiOutlineDislike />}
+              <span className="ml-1">{Object.keys(comment.dislikes || {}).length}</span>
             </button>
             <button
               className="text-blue-500 text-sm"
@@ -159,6 +218,34 @@ const Devlogs = () => {
                       />
                       <div>
                         <h3 className="text-lg font-semibold">{devlog.description}</h3>
+                        <div className="flex mt-4">
+                          <button
+                            className="flex items-center text-green-500 mr-4"
+                            onClick={() =>
+                              handleLikeDislike(
+                                `devnote/devlogs/${devlog.userId}/${devlog.devlogId}`,
+                                "likes",
+                                devlog.userId
+                              )
+                            }
+                          >
+                            <AiOutlineLike />
+                            <span className="ml-1">{Object.keys(devlog.likes || {}).length}</span>
+                          </button>
+                          <button
+                            className="flex items-center text-red-500"
+                            onClick={() =>
+                              handleLikeDislike(
+                                `devnote/devlogs/${devlog.userId}/${devlog.devlogId}`,
+                                "dislikes",
+                                devlog.userId
+                              )
+                            }
+                          >
+                            <AiOutlineDislike />
+                            <span className="ml-1">{Object.keys(devlog.dislikes || {}).length}</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
                     <h3 className="text-lg font-semibold mt-4">Comments:</h3>
