@@ -1,19 +1,35 @@
 import React, { useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { toggleTheme } from "../redux/themeSlice";
+import { signOut } from "firebase/auth";
+import { auth } from "../config/firebase";
+import { logout } from "../redux/authSlice";
+import { useNavigate } from "react-router-dom";
 
 const Navbar = ({ toggleSidebar }) => {
   const darkMode = useSelector((state) => state.theme.darkMode); // Get dark mode state from Redux
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
-  const handleToggleDarkMode = () => dispatch(toggleTheme()); // Dispatch the toggle action
+  const handleToggleDarkMode = () => dispatch(toggleTheme());
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);       // Sign out from Firebase
+      dispatch(logout());         // Update Redux state
+      navigate("/login");         // Redirect to login page
+    } catch (error) {
+      console.error("Error during logout:", error);
+      // Optionally show an error message to the user
+    }
+  };
 
   return (
     <div
-      className={`fixed top-0 left-0 w-full px-4 py-3 z-50 ${
+      className={`fixed top-0 left-0 w-full px-4 py-3 z-50 flex justify-between items-center shadow-md ${
         darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-800"
-      } flex justify-between items-center shadow-md`}
+      }`}
     >
       <button
         onClick={toggleSidebar}
@@ -46,12 +62,12 @@ const Navbar = ({ toggleSidebar }) => {
               >
                 Profile
               </a>
-              <a
-                href="/logout"
-                className="block px-4 py-2 hover:bg-gray-600 hover:text-white"
+              <button
+                onClick={handleLogout}
+                className="w-full text-left block px-4 py-2 hover:bg-gray-600 hover:text-white"
               >
                 Logout
-              </a>
+              </button>
             </div>
           )}
         </div>

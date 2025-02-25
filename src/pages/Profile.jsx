@@ -1,13 +1,15 @@
 import React, { useState } from "react";
 import { useSelector } from "react-redux";
+import { auth, db } from "../config/firebase";
+import { updateProfile, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "firebase/auth";
+import { ref, update } from "firebase/database";
 
 const Profile = () => {
   const isDarkMode = useSelector((state) => state.theme.isDarkMode); // Access dark/light mode state from Redux
-
   const [userDetails, setUserDetails] = useState({
-    name: "John Doe",
-    email: "john@example.com",
-    role: "Admin",
+    name: auth.currentUser?.displayName || "Unknown User",
+    email: auth.currentUser?.email || "Unknown Email",
+    role: "User",
   });
 
   const [changePassword, setChangePassword] = useState({
@@ -16,28 +18,78 @@ const Profile = () => {
     confirmPassword: "",
   });
 
+  const [newName, setNewName] = useState(userDetails.name); // State for changing name
+
+  // Handle password change input
   const handlePasswordChange = (e) => {
     const { name, value } = e.target;
     setChangePassword((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handlePasswordSubmit = (e) => {
+  // Handle name change input
+  const handleNameChange = (e) => {
+    setNewName(e.target.value);
+  };
+
+  // Submit updated name
+  const handleNameSubmit = async (e) => {
     e.preventDefault();
-    if (changePassword.newPassword !== changePassword.confirmPassword) {
-      alert("Passwords do not match!");
-      return;
+    try {
+      if (!newName.trim()) {
+        alert("Name cannot be empty!");
+        return;
+      }
+
+      // Update Firebase Auth Profile
+      await updateProfile(auth.currentUser, { displayName: newName });
+
+      // Update the user's name in the Realtime Database (optional)
+      const userRef = ref(db, `users/${auth.currentUser.uid}`);
+      await update(userRef, { name: newName });
+
+      setUserDetails((prev) => ({ ...prev, name: newName })); // Update UI
+      alert("Name successfully updated!");
+    } catch (error) {
+      console.error("Error updating name:", error);
+      alert("Failed to update name. Please try again.");
     }
-    alert("Password successfully updated!");
-    setChangePassword({
-      currentPassword: "",
-      newPassword: "",
-      confirmPassword: "",
-    });
+  };
+
+  // Submit updated password
+  const handlePasswordSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      if (changePassword.newPassword !== changePassword.confirmPassword) {
+        alert("Passwords do not match!");
+        return;
+      }
+
+      // Reauthenticate user before updating password
+      const credential = EmailAuthProvider.credential(
+        auth.currentUser.email,
+        changePassword.currentPassword
+      );
+      await reauthenticateWithCredential(auth.currentUser, credential);
+
+      // Update password
+      await updatePassword(auth.currentUser, changePassword.newPassword);
+
+      alert("Password successfully updated!");
+      setChangePassword({
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+      });
+    } catch (error) {
+      console.error("Error updating password:", error);
+      alert("Failed to update password. Please try again.");
+    }
   };
 
   const handleLogout = () => {
-    alert("Logging out...");
-    // Redirect to login page or handle session cleanup
+    auth.signOut().then(() => {
+      alert("Logged out successfully!");
+    });
   };
 
   return (
@@ -66,6 +118,43 @@ const Profile = () => {
             <strong>Role:</strong> {userDetails.role}
           </p>
         </div>
+      </div>
+
+      {/* Change Name */}
+      <div
+        className={`shadow-md rounded-lg p-4 mb-6 transition-colors ${
+          isDarkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"
+        }`}
+      >
+        <h2 className="text-xl font-semibold mb-4">Update Name</h2>
+        <form onSubmit={handleNameSubmit}>
+          <div className="mb-4">
+            <label
+              htmlFor="newName"
+              className="block text-sm font-medium mb-2"
+            >
+              New Name
+            </label>
+            <input
+              type="text"
+              id="newName"
+              value={newName}
+              onChange={handleNameChange}
+              className={`w-full p-2 border rounded-lg focus:outline-none transition-colors ${
+                isDarkMode
+                  ? "bg-gray-700 text-white border-gray-600"
+                  : "bg-white text-gray-900 border-gray-300"
+              }`}
+              required
+            />
+          </div>
+          <button
+            type="submit"
+            className="w-full bg-blue-500 text-white py-2 rounded-lg hover:bg-blue-600 transition"
+          >
+            Update Name
+          </button>
+        </form>
       </div>
 
       {/* Change Password */}

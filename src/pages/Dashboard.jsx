@@ -12,6 +12,7 @@ import {
 } from "chart.js";
 import { Bar, Pie } from "react-chartjs-2";
 import { getDatabase, ref, onValue } from "firebase/database";
+import { ClipLoader } from "react-spinners";
 
 // Register required ChartJS components
 ChartJS.register(
@@ -25,7 +26,7 @@ ChartJS.register(
 );
 
 const Dashboard = () => {
-  const isDarkMode = useSelector((state) => state.theme.isDarkMode);
+  const isDarkMode = useSelector((state) => state.theme.darkMode);
   const [userStats, setUserStats] = useState([]);
   const [userGrowthData, setUserGrowthData] = useState({
     labels: [],
@@ -121,7 +122,7 @@ const Dashboard = () => {
 
   return (
     <div
-      className={`p-4 ${
+      className={`p-4 min-h-screen transition-colors duration-300 ${
         isDarkMode ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-900"
       }`}
     >
@@ -151,7 +152,26 @@ const Dashboard = () => {
             }`}
           >
             <h3 className="text-lg font-bold mb-2">User Growth</h3>
-            <Bar data={userGrowthData} />
+            <Bar
+              data={userGrowthData}
+              options={{
+                plugins: {
+                  legend: {
+                    labels: {
+                      color: isDarkMode ? "#ffffff" : "#000000",
+                    },
+                  },
+                },
+                scales: {
+                  x: {
+                    ticks: { color: isDarkMode ? "#ffffff" : "#000000" },
+                  },
+                  y: {
+                    ticks: { color: isDarkMode ? "#ffffff" : "#000000" },
+                  },
+                },
+              }}
+            />
           </div>
           <div
             className={`p-4 rounded shadow ${
@@ -159,11 +179,24 @@ const Dashboard = () => {
             }`}
           >
             <h3 className="text-lg font-bold mb-2">User Distribution</h3>
-            <Pie data={userPieData} />
+            <Pie
+              data={userPieData}
+              options={{
+                plugins: {
+                  legend: {
+                    labels: {
+                      color: isDarkMode ? "#ffffff" : "#000000",
+                    },
+                  },
+                },
+              }}
+            />
           </div>
         </div>
       ) : (
-        <p>Loading data...</p>
+        <div className="flex justify-center items-center h-48">
+          <ClipLoader color={isDarkMode ? "#ffffff" : "#000000"} size={50} />
+        </div>
       )}
     </div>
   );

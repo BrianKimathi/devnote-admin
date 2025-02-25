@@ -1,7 +1,7 @@
-import React, { useState } from "react";
-import { useDispatch } from "react-redux";
+import React, { useState, useEffect } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { ref, get, set, update, push } from "firebase/database"; // Import push
+import { ref, get } from "firebase/database";
 import { auth, db } from "../config/firebase";
 import { loginSuccess } from "../redux/authSlice";
 import { useNavigate } from "react-router-dom";
@@ -10,39 +10,64 @@ const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const isLoggedIn = useSelector((state) => state.auth.isLoggedIn);
+
+  // Redirect already logged-in users to the dashboard
+  useEffect(() => {
+    if (isLoggedIn) {
+      navigate("/");
+    }
+  }, [isLoggedIn, navigate]);
+
+  const handleError = (error) => {
+    switch (error.code) {
+      case "auth/user-not-found":
+        return "User not found. Please check your email.";
+      case "auth/wrong-password":
+        return "Incorrect password. Please try again.";
+      case "auth/too-many-requests":
+        return "Too many login attempts. Please try again later.";
+      default:
+        return "An unexpected error occurred. Please try again.";
+    }
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
+    setLoading(true);
 
     try {
-      // Authenticate user
-      await signInWithEmailAndPassword(auth, email, password);
+      // Authenticate user with Firebase Auth
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const { email: authenticatedEmail } = userCredential.user;
 
       // Reference to the adminList in Firebase
       const adminRef = ref(db, "devnote/adminList");
 
-      // Check if the email already exists in the adminList
+      // Check if the user exists in adminList
       const snapshot = await get(adminRef);
       if (snapshot.exists()) {
-        const adminList = snapshot.val();
-        if (!Object.values(adminList).includes(email)) {
-          // Add the email to adminList if it doesn't already exist
-          const newAdminKey = push(adminRef).key; // Generate a unique key for the email
-          await update(adminRef, { [newAdminKey]: email });
+        const adminList = Object.values(snapshot.val());
+        if (!adminList.includes(authenticatedEmail)) {
+          setError("You do not have admin privileges.");
+          return;
         }
       } else {
-        // If adminList doesn't exist, initialize it with the current email
-        await set(adminRef, { [push(adminRef).key]: email });
+        setError("No admin privileges found in the system.");
+        return;
       }
 
-      // Dispatch login success and navigate to the dashboard
-      dispatch(loginSuccess({ email }));
+      // Dispatch login success
+      dispatch(loginSuccess({ email: authenticatedEmail }));
       navigate("/");
     } catch (err) {
-      setError(err.message || "An error occurred. Please try again.");
+      setError(handleError(err));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -79,8 +104,9 @@ const Login = () => {
         <button
           type="submit"
           className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
+          disabled={loading}
         >
-          Login
+          {loading ? "Logging in..." : "Login"}
         </button>
       </form>
     </div>
